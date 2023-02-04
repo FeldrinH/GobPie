@@ -2,6 +2,7 @@ package HTTPserver;
 
 import api.GoblintService;
 import com.sun.net.httpserver.HttpServer;
+import goblintserver.GoblintServer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -23,15 +24,15 @@ public class GobPieHTTPServer {
     private String httpServerAddress;
     private final Logger log = LogManager.getLogger(GobPieHTTPServer.class);
 
-    public GobPieHTTPServer(GoblintService goblintService) {
+    public GobPieHTTPServer(GoblintServer goblintServer) {
         try {
             InetSocketAddress socket = new InetSocketAddress("0.0.0.0", 0);
             httpServer = HttpServer.create(socket, 42);
 
             httpServerAddress = "http://localhost:" + this.httpServer.getAddress().getPort() + "/";
-            httpServer.createContext("/", new GobPieHttpHandler(httpServerAddress, goblintService));
-            httpServer.createContext("/cfg/", new GobPieHttpHandler(httpServerAddress, goblintService));
-            httpServer.createContext("/node/", new GobPieHttpHandler(httpServerAddress, goblintService));
+            httpServer.createContext("/", new GobPieHttpHandler(httpServerAddress, goblintServer));
+            httpServer.createContext("/cfg/", new GobPieHttpHandler(httpServerAddress, goblintServer));
+            httpServer.createContext("/node/", new GobPieHttpHandler(httpServerAddress, goblintServer));
 
             httpServer.setExecutor(null);
         } catch (IOException e) {

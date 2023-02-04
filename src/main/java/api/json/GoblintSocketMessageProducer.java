@@ -1,6 +1,6 @@
 package api.json;
 
-import org.apache.logging.log4j.LogManager;
+import org.eclipse.jgit.util.IO;
 import org.eclipse.lsp4j.jsonrpc.*;
 import org.eclipse.lsp4j.jsonrpc.json.MessageConstants;
 import org.eclipse.lsp4j.jsonrpc.json.MessageJsonHandler;
@@ -28,8 +28,6 @@ public class GoblintSocketMessageProducer implements MessageProducer, Closeable,
     private MessageConsumer callback;
     private boolean keepRunning;
 
-    private final org.apache.logging.log4j.Logger log = LogManager.getLogger(GoblintSocketMessageConsumer.class);
-
     public GoblintSocketMessageProducer(InputStream input, MessageJsonHandler jsonHandler) {
         this(input, jsonHandler, null);
     }
@@ -53,14 +51,6 @@ public class GoblintSocketMessageProducer implements MessageProducer, Closeable,
                 if (!result)
                     keepRunning = false;
             } // while (keepRunning)
-        } catch (IOException exception) {
-            if (JsonRpcException.indicatesStreamClosed(exception)) {
-                // Only log the error if we had intended to keep running
-                if (keepRunning)
-                    fireStreamClosed(exception);
-            } else
-                throw new JsonRpcException(exception);
-            this.keepRunning = false;
         } finally {
             this.callback = null;
             this.keepRunning = false;
@@ -75,27 +65,18 @@ public class GoblintSocketMessageProducer implements MessageProducer, Closeable,
         LOG.log(Level.SEVERE, message, error);
     }
 
-    /**
-     * Report that the stream was closed through an exception.
-     */
-    protected void fireStreamClosed(Exception cause) {
-        String message = cause.getMessage() != null ? cause.getMessage() : "The input stream was closed.";
-        LOG.log(Level.INFO, message, cause);
-    }
-
 
     /**
      * Read the JSON content part of a message, parse it, and notify the callback.
      *
      * @return {@code true} if we should continue reading from the input stream, {@code false} if we should stop
      */
-    protected boolean handleMessage() throws IOException {
+    protected boolean handleMessage() {
         if (callback == null)
             callback = message -> LOG.log(Level.INFO, "Received message: " + message);
 
         try {
             String content = inputReader.readLine();
-            log.info("Response read from socket.");
             try {
                 if (content != null) {
                     Message message = jsonHandler.parseMessage(content);
@@ -111,6 +92,9 @@ public class GoblintSocketMessageProducer implements MessageProducer, Closeable,
                     fireError(exception);
                 return false;
             }
+        } catch (IOException exception) {
+            // IOException probably indicates that the stream was closed. This does not need to be logged.
+            return false;
         } catch (Exception exception) {
             // UnsupportedEncodingException can be thrown by String constructor
             // JsonParseException can be thrown by jsonHandler

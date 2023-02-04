@@ -7,6 +7,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+import goblintserver.GoblintServer;
 import gobpie.GobPieException;
 import gobpie.GobPieExceptionType;
 import guru.nidi.graphviz.engine.Format;
@@ -37,13 +38,13 @@ public class GobPieHttpHandler implements HttpHandler {
 
     private static final int HTTP_OK_STATUS = 200;
     private final String httpServerAddress;
-    private final GoblintService goblintService;
+    private final GoblintServer goblintServer;
 
     private final Logger log = LogManager.getLogger(GobPieHttpHandler.class);
 
-    public GobPieHttpHandler(String httpServerAddress, GoblintService goblintService) {
+    public GobPieHttpHandler(String httpServerAddress, GoblintServer goblintServer) {
         this.httpServerAddress = httpServerAddress;
-        this.goblintService = goblintService;
+        this.goblintServer = goblintServer;
     }
 
     @Override
@@ -144,10 +145,10 @@ public class GobPieHttpHandler implements HttpHandler {
     private String getCFG(String funName) {
         Params params = new Params(funName);
         try {
-            GoblintCFGResult cfgResponse = goblintService.cfg(params).get();
+            GoblintCFGResult cfgResponse = goblintServer.getGoblintService().cfg(params).get();
             String cfg = cfgResponse.getCfg();
             return cfg2svg(cfg);
-        } catch (ExecutionException | InterruptedException e) {
+        } catch (ExecutionException | InterruptedException | IllegalStateException e) {
             throw new GobPieException("Sending the request to or receiving result from the server failed.", e, GobPieExceptionType.GOBLINT_EXCEPTION);
         }
     }
@@ -184,8 +185,8 @@ public class GobPieHttpHandler implements HttpHandler {
     private List<JsonObject> getNodeStates(String nodeId) {
         NodeParams params = new NodeParams(nodeId);
         try {
-            return goblintService.node_state(params).get();
-        } catch (ExecutionException | InterruptedException e) {
+            return goblintServer.getGoblintService().node_state(params).get();
+        } catch (ExecutionException | InterruptedException | IllegalStateException e) {
             throw new GobPieException("Sending the request to or receiving result from the server failed.", e, GobPieExceptionType.GOBLINT_EXCEPTION);
         }
     }
