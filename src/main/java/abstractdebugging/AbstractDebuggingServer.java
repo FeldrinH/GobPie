@@ -24,6 +24,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -739,27 +740,6 @@ public class AbstractDebuggingServer implements IDebugProtocolServer {
         return CompletableFuture.completedFuture(response);
     }
 
-    @Override
-    public CompletableFuture<EvaluateResponse> evaluate(EvaluateArguments args) {
-        var frame = getFrame(args.getFrameId());
-        if (frame.getNode() == null) {
-            throw new IllegalStateException("Attempt to evaluate expression in unavailable frame " + args.getFrameId());
-        }
-
-        JsonElement result;
-        try {
-            result = evaluateExpression(frame.getNode().nodeId(), args.getExpression());
-        } catch (RequestFailedException e) {
-            return CompletableFuture.failedFuture(userFacingError(e.getMessage()));
-        }
-
-        var response = new EvaluateResponse();
-        var resultVariable = domainValueToVariable("", null, result);
-        response.setResult(resultVariable.getValue());
-        response.setVariablesReference(resultVariable.getVariablesReference());
-        return CompletableFuture.completedFuture(response);
-    }
-
     private Variable domainValueToVariable(String name, @Nullable String type, JsonElement value) {
         Variable variable;
         if (value.isJsonObject()) {
@@ -816,6 +796,65 @@ public class AbstractDebuggingServer implements IDebugProtocolServer {
         variable.setType(type);
         variable.setValue(value);
         return variable;
+    }
+
+    private static final Pattern COMMAND_REGEX = Pattern.compile("^\\\\(\\p{L}+)\\s*(.*)$");
+
+    private record Command(String description, Function<String, EvaluateResponse> function) {
+    }
+
+    private final Map<String, Command> commands = Map.ofEntries(
+            Map.entry("\\resolvecallstacks", new Command("Resolve ambiguous call stacks by picking first possible caller in all cases.", this::commandResolveCallStacks))
+    );
+
+    @Override
+    public CompletableFuture<CompletionsResponse> completions(CompletionsArguments args) {
+        if (args.getText().length() > 30 || !args.getText().startsWith("\\")) {
+            // Don't try to match strings that can't realistically have any completions.
+            var response = new CompletionsResponse();
+            response.setTargets(new CompletionItem[0]);
+            return CompletableFuture.completedFuture(response);
+        }
+        var completions = commands.entrySet().stream()
+                .filter(e -> e.getKey().startsWith(args.getText()))
+                .map(e -> {
+                    var completion = new CompletionItem();
+                    completion.setLabel(e.getKey());
+                    completion.setDetail(e.getValue().description());
+                    return completion;
+                })
+                .toArray(CompletionItem[]::new);
+        var response = new CompletionsResponse();
+        response.setTargets(completions);
+        return CompletableFuture.completedFuture(response);
+    }
+
+    @Override
+    public CompletableFuture<EvaluateResponse> evaluate(EvaluateArguments args) {
+        var matcher = COMMAND_REGEX.matcher(args.getExpression());
+        if (matcher.matches())
+
+        var frame = getFrame(args.getFrameId());
+        if (frame.getNode() == null) {
+            throw new IllegalStateException("Attempt to evaluate expression in unavailable frame " + args.getFrameId());
+        }
+
+        JsonElement result;
+        try {
+            result = evaluateExpression(frame.getNode().nodeId(), args.getExpression());
+        } catch (RequestFailedException e) {
+            return CompletableFuture.failedFuture(userFacingError(e.getMessage()));
+        }
+
+        var response = new EvaluateResponse();
+        var resultVariable = domainValueToVariable("", null, result);
+        response.setResult(resultVariable.getValue());
+        response.setVariablesReference(resultVariable.getVariablesReference());
+        return CompletableFuture.completedFuture(response);
+    }
+
+    private EvaluateResponse commandResolveCallStacks(String args) {
+
     }
 
     // Helper methods:
